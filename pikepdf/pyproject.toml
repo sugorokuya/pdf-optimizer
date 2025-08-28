@@ -1,0 +1,246 @@
+# SPDX-FileCopyrightText: 2022 James R. Barlow
+# SPDX-License-Identifier: MPL-2.0
+
+[build-system]
+requires = ["setuptools >= 77.0.3", "pybind11 >= 3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pikepdf"
+version = "9.10.2"
+description = "Read and write PDFs with Python, powered by qpdf"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["PDF"]
+authors = [{ name = "James R. Barlow", email = "james@purplerock.ca" }]
+license = "MPL-2.0"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = ["Pillow>=10.0.1", "Deprecated", "lxml>=4.8", "packaging"]
+
+[project.urls]
+documentation = "https://pikepdf.readthedocs.io/"
+repository = "https://github.com/pikepdf/pikepdf"
+changelog = "https://pikepdf.readthedocs.io/en/latest/releasenotes/index.html"
+
+[project.optional-dependencies]
+dev = ["pre-commit", "typer", "mypy"]
+docs = [
+  "myst-parser>=3.0.1",
+  "sphinx>=3",
+  "sphinx-autoapi",
+  "sphinx-design",
+  "sphinx-issues",
+  "sphinx-rtd-theme",
+  "tomli; python_version < '3.11'",
+]
+mypy = ["lxml-stubs", "types-Pillow", "types-requests", "types-setuptools"]
+test = [
+  "attrs>=20.2.0",
+  "coverage[toml]",
+  "hypothesis>=6.36",
+  "numpy>=1.21.0; platform_machine == 'x86_64' and platform_python_implementation == 'CPython'",
+  "psutil>=5.9; os_name != 'nt'",
+  "pybind11",
+  "pytest>=6.2.5",
+  "pytest-cov>=3.0.0",
+  "pytest-timeout>=2.1.0",
+  "pytest-xdist>=2.5.0",
+  "python-dateutil>=2.8.1",
+  "python-xmp-toolkit>=2.0.1; os_name != 'nt' and platform_machine == 'x86_64'",
+  "tomli; python_version < '3.11'",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pikepdf", "pikepdf.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+pikepdf = ["*.dll", "py.typed", "*.pyi", "**/*.pyi"]
+
+[tool.cibuildwheel]
+test-command = "pytest -nauto {project}/tests"
+test-extras = "test"
+# Reminder:
+#   build.yml sets CIBW_BUILD to select what can be built
+#   this file sets skip to deselect what cannot be built
+skip = [
+  "*-win32", # no 32-bit builds/not supported by Pillow anymore
+]
+build-frontend = "build"
+
+[tool.cibuildwheel.environment]
+QPDF_MIN_VERSION = "11.9.0"
+QPDF_VERSION = "12.2.0"
+QPDF_PATTERN = "https://github.com/qpdf/qpdf/releases/download/vVERSION/qpdf-VERSION.tar.gz"
+
+[tool.cibuildwheel.linux]
+before-all = [
+  """yum install -y \
+    libjpeg-turbo-devel \
+    libxml2-devel \
+    libxslt-devel \
+    wget \
+    zlib-devel \
+  """,
+  "sh -c 'yum install -y libxmp || true'",
+  "bash build-scripts/posix-download-qpdf.bash $QPDF_VERSION",
+  "bash build-scripts/posix-build-wheel-deps.bash",
+]
+environment-pass = ["CI"]
+# For manylinux_2_28 we need this shim for auditwheel
+# https://github.com/pypa/auditwheel/pull/597
+repair-wheel-command = "LD_LIBRARY_PATH=\"/usr/local/lib:/usr/local/lib64\" auditwheel repair -w {dest_dir} {wheel}"
+manylinux-x86_64-image = "manylinux_2_28"
+musllinux-x86_64-image = "musllinux_1_2"
+musllinux-aarch64-image = "musllinux_1_2"
+
+[[tool.cibuildwheel.overrides]]
+select = "*-musllinux*"
+before-all = [
+  """apk add \
+    cmake \
+    exempi-dev \
+    jpeg-dev \
+    make \
+    mupdf-tools \
+    py3-lxml \
+    py3-pillow \
+    py3-pybind11-dev \
+    py3-setuptools \
+    py3-wheel \
+    python3 \
+    python3-dev \
+    wget \
+    zlib-dev \
+  """,
+  "bash build-scripts/posix-download-qpdf.bash $QPDF_VERSION",
+  "bash build-scripts/posix-build-wheel-deps.bash",
+]
+
+[tool.cibuildwheel.macos]
+before-all = [
+  "sh -c 'brew update || true'",
+  "sh -c 'brew install gnutls little-cms2 mupdf wget || true'",
+  "bash build-scripts/posix-download-qpdf.bash $QPDF_VERSION",
+  "bash build-scripts/posix-build-wheel-deps.bash",
+] # Use 'brew whatever || true' workaround until https://github.com/actions/setup-python/issues/9966 is fixed
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx*x86_64"
+inherit.environment = "append"
+environment.MACOSX_DEPLOYMENT_TARGET = "13.0"
+# When MACOSX_DEPLOYMENT_TARGET is >= 11.0, set this to 0
+# to ensure that pip/auditwheel generate the correct version stamp.
+environment.SYSTEM_VERSION_COMPAT = 0
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx*arm64"
+inherit.environment = "append"
+environment.MACOSX_DEPLOYMENT_TARGET = "14.0"
+
+[tool.cibuildwheel.windows]
+
+[tool.mypy]
+exclude = ["^_qpdf\\.py$"]
+
+[[tool.mypy.overrides]]
+module = ["deprecation"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+norecursedirs = [
+  "*.egg",
+  ".*",
+  "lib",
+  "_darcs",
+  "dist",
+  "build",
+  "node_modules",
+  "venv",
+  "{arch}",
+]
+testpaths = ["tests"]
+addopts = "-n auto"
+
+[tool.coverage.run]
+concurrency = ["multiprocessing"]
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_lines = [
+  # Have to re-enable the standard pragma
+  "pragma: no cover",
+  # Don't complain if tests don't hit defensive assertion code:
+  "raise AssertionError",
+  "raise NotImplementedError",
+  # Don't complain if non-runnable code isn't run:
+  "if 0:",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "if typing.TYPE_CHECKING:",
+]
+
+[tool.coverage.html]
+directory = "coverage/pycov"
+
+[tool.ruff]
+src = ["src/pikepdf"]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+  "D",    # pydocstyle
+  "E",    # pycodestyle
+  "W",    # pycodestyle
+  "F",    # pyflakes
+  "I001", # isort
+  "TID",  # flake8-tidy-imports
+  "UP",   # pyupgrade
+  "YTT",  # flake8-2020
+]
+ignore = ["D105", "B028"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+banned-module-level-imports = ["numpy"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pikepdf", "pikepdf._core"]
+known-third-party = [
+  "PIL",
+  "conftest",
+  "hypothesis",
+  "lxml",
+  "psutil",
+  "pytest",
+  "setuptools",
+]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*test*.py" = ["D", "E501"]
+"docs/*.py" = ["D", "E501", "E402", "F401"]
+"bin/bump_version.py" = ["E501"]
+"examples/*.py" = ["D103"]
+"fuzzing/*.py" = ["D", "E501"]
+"**/*.ipynb" = ["D", "E", "F"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[dependency-groups]
+dev = []
