@@ -1,0 +1,3 @@
+[submodule "pikepdf"]
+	path = pikepdf
+	url = https://github.com/sugorokuya/pikepdf.git
