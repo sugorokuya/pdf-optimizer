@@ -1,0 +1,62 @@
+# Enhanced pikepdf Docker Compose
+# 簡単にPDF最適化環境を起動
+
+version: '3.8'
+
+services:
+  enhanced-pikepdf:
+    build:
+      context: .
+      dockerfile: Dockerfile.enhanced-pikepdf
+    image: enhanced-pikepdf:latest
+    container_name: enhanced-pikepdf-optimizer
+    volumes:
+      # PDFファイル用のボリューム
+      - ./pdfs:/data
+      # Enhanced pikepdfソース（開発時）
+      - /Users/maltakoji/Plant/enhanced-pikepdf:/app/enhanced-pikepdf-source:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: /app/help.sh
+    
+  # 開発用サービス（対話的使用）
+  enhanced-pikepdf-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.enhanced-pikepdf
+    image: enhanced-pikepdf:latest
+    container_name: enhanced-pikepdf-dev
+    volumes:
+      - ./pdfs:/data
+      - /Users/maltakoji/Plant/enhanced-pikepdf:/app/enhanced-pikepdf-source:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: bash
+    stdin_open: true
+    tty: true
+    
+  # バッチ処理用サービス
+  enhanced-pikepdf-batch:
+    build:
+      context: .
+      dockerfile: Dockerfile.enhanced-pikepdf
+    image: enhanced-pikepdf:latest
+    volumes:
+      - ./input-pdfs:/data/input:ro
+      - ./output-pdfs:/data/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: bash -c "
+      echo '🚀 Enhanced pikepdf Batch Processing';
+      for pdf in /data/input/*.pdf; do
+        if [ -f \"$$pdf\" ]; then
+          filename=$$(basename \"$$pdf\");
+          output=\"/data/output/$${filename%.*}_optimized.pdf\";
+          echo \"Processing: $$filename\";
+          python enhanced_pdf_optimizer_integrated.py \"$$pdf\" -o \"$$output\" -v;
+        fi;
+      done;
+      echo '✅ Batch processing completed';
+      "
+    profiles:
+      - batch
